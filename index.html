@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Circuit Schematic Evolution</title>
+    <!-- Tailwind CSS for UI controls and overlays -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;600;700&display=swap');
+        body {
+            font-family: 'Fira Code', monospace;
+            background-color: #080c14;
+            color: #94a3b8;
+            overflow: hidden;
+            user-select: none;
+        }
+        /* Grid background pattern */
+        .blueprint-bg {
+            background-color: #0b0f19;
+            background-image: 
+                linear-gradient(rgba(14, 165, 233, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(14, 165, 233, 0.05) 1px, transparent 1px),
+                linear-gradient(rgba(14, 165, 233, 0.02) 5px, transparent 5px),
+                linear-gradient(90deg, rgba(14, 165, 233, 0.02) 5px, transparent 5px);
+            background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+            background-position: -1px -1px, -1px -1px, -1px -1px, -1px -1px;
+        }
+        canvas {
+            touch-action: none;
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0b0f19; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+    </style>
+</head>
+<body class="blueprint-bg h-screen w-screen flex flex-col justify-between relative overflow-hidden">
+
+    <!-- Top Blueprint Header -->
+    <header class="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-10 pointer-events-none">
+        <div class="bg-slate-900/80 backdrop-blur border border-cyan-500/30 p-3 rounded-lg shadow-lg pointer-events-auto flex items-center gap-3">
+            <div class="w-3 h-3 rounded-full bg-cyan-400 animate-pulse"></div>
+            <div>
+                <h1 class="text-sm font-bold text-cyan-400 tracking-wider uppercase">Project: Logic Graph Schematic</h1>
+                <p class="text-xs text-slate-400" id="status-text">Phase 1: Basic Closed Wire Loop</p>
+            </div>
+        </div>
+
+        <div class="bg-slate-900/80 backdrop-blur border border-slate-700/50 p-2 rounded-lg shadow-lg pointer-events-auto flex items-center gap-2">
+            <button id="btn-zoom-in" class="p-2 bg-slate-800 hover:bg-slate-700 text-cyan-400 rounded border border-slate-700 transition font-bold" title="Zoom In">+</button>
+            <button id="btn-zoom-out" class="p-2 bg-slate-800 hover:bg-slate-700 text-cyan-400 rounded border border-slate-700 transition font-bold" title="Zoom Out">-</button>
+            <button id="btn-reset-view" class="p-2 bg-slate-800 hover:bg-slate-700 text-cyan-400 rounded border border-slate-700 transition text-xs font-bold px-3">RESET VIEW</button>
+        </div>
+    </header>
+
+    <!-- Canvas Container -->
+    <main class="w-full h-full relative cursor-grab active:cursor-grabbing" id="canvas-container">
+        <canvas id="schematicCanvas" class="w-full h-full block"></canvas>
+    </main>
+
+    <!-- Node Hover Card / Upgrade Modal Sidebar -->
+    <div id="hover-card" class="absolute bottom-6 left-6 z-10 w-80 bg-slate-900/90 backdrop-blur-md border border-cyan-500/40 p-4 rounded-xl shadow-2xl transition-all duration-200 transform translate-y-4 opacity-0 pointer-events-none">
+        <div class="flex justify-between items-start mb-2">
+            <span id="card-type" class="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">Node Component</span>
+            <span id="card-tier" class="text-[10px] text-amber-400 font-semibold">Tier 1</span>
+        </div>
+        <h3 id="card-title" class="text-base font-bold text-slate-100 mb-1">Component Name</h3>
+        <p id="card-desc" class="text-xs text-slate-300 leading-relaxed mb-3">Description of the module evolution and structural changes.</p>
+        
+        <div id="card-prereq-container" class="mb-3 hidden">
+            <div class="text-[10px] uppercase tracking-wider text-rose-400 font-semibold mb-1">Prerequisites Required:</div>
+            <ul id="card-prereq-list" class="text-xs text-rose-300/80 list-disc list-inside"></ul>
+        </div>
+
+        <div id="card-action-prompt" class="text-xs font-bold text-cyan-400 bg-cyan-950/50 p-2 rounded border border-cyan-800/50 text-center animate-pulse">
+            Click Node to Evolve Component
+        </div>
+    </div>
+
+    <!-- Late Game Telemetry Controller Pad (Appears when RF Controller is unlocked) -->
+    <div id="remote-controller" class="absolute bottom-6 right-6 z-10 bg-slate-900/90 backdrop-blur-md border border-amber-500/40 p-4 rounded-xl shadow-2xl transition-all duration-500 opacity-0 pointer-events-none translate-y-10">
+        <div class="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2 flex items-center justify-between">
+            <span>RF Telemetry Link</span>
+            <span id="rf-status" class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+        </div>
+        <div class="grid grid-cols-3 gap-2 w-36 h-36 mx-auto">
+            <div></div>
+            <button id="btn-up" class="bg-slate-800 hover:bg-cyan-600 border border-slate-600 active:bg-cyan-400 text-cyan-300 rounded-lg font-bold flex items-center justify-center text-lg shadow-md transition">▲</button>
+            <div></div>
+            <button id="btn-left" class="bg-slate-800 hover:bg-cyan-600 border border-slate-600 active:bg-cyan-400 text-cyan-300 rounded-lg font-bold flex items-center justify-center text-lg shadow-md transition">◄</button>
+            <div class="bg-slate-950 border border-cyan-900/50 rounded-lg flex items-center justify-center text-[9px] text-cyan-500 font-bold">MATRIX</div>
+            <button id="btn-right" class="bg-slate-800 hover:bg-cyan-600 border border-slate-600 active:bg-cyan-400 text-cyan-300 rounded-lg font-bold flex items-center justify-center text-lg shadow-md transition">►</button>
+            <div></div>
+            <button id="btn-down" class="bg-slate-800 hover:bg-cyan-600 border border-slate-600 active:bg-cyan-400 text-cyan-300 rounded-lg font-bold flex items-center justify-center text-lg shadow-md transition">▼</button>
+            <div></div>
+        </div>
+        <div class="text-[10px] text-slate-400 text-center mt-2">Send RF Command Signal</div>
+    </div>
+
+    <!-- Legend Footer -->
+    <footer class="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-slate-900/80 backdrop-blur border border-slate-800 px-4 py-2 rounded-full text-xs flex gap-4 pointer-events-auto">
+        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span><span class="text-slate-300">Power Trace</span></div>
+        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span><span class="text-slate-300">Logic Bus</span></div>
+        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-purple-400"></span><span class="text-slate-300">Clock & PWM</span></div>
+        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-fuchsia-400"></span><span class="text-slate-300">High Voltage</span></div>
+        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span><span class="text-slate-300">Wireless Telemetry</span></div>
+    </footer>
+
+    <script>
+        // --- GAME ENGINE & SCHEMATIC LOGIC ---
+        const canvas = document.getElementById('schematicCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+
+        let width = canvas.width = container.clientWidth;
+        let height = canvas.height = container.clientHeight;
+
+        let scale = 1.0;
+        let panX = width / 2 - 100;
+        let panY = height / 2;
+        let isDragging = false;
+        let startPanX = 0, startPanY = 0;
+        let hoveredNode = null;
+        let animationFrameId = null;
+
+        // Particle System Pools
+        let electronParticles = [];
+        let heatParticles = [];
+        let rfWaves = [];
+        let actuatorSparks = [];
+
+        // Servo Actuator Motion States
+        const servoStates = {
+            fl: { tilt: 0, vibe: 0 },
+            fr: { tilt: 0, vibe: 0 },
+            rl: { tilt: 0, vibe: 0 },
+            rr: { tilt: 0, vibe: 0 }
+        };
+
+        // --- EXPANDED DECOMPOSED NODE TREE DEFINITIONS ---
+        const nodesData = {
+            // 1. MAIN POWER SECTION
+            "power_source": {
+                id: "power_source",
+                x: -420, y: 0,
+                stage: 0,
+                maxStage: 3,
+                stages: [
+                    { title: "Coin Cell Battery", type: "Power Primary", desc: "3V CR2032 Lithium Cell providing base potential.", symbol: "battery_coin" },
+                    { title: "Dual AA Series Cell", type: "Power Primary", desc: "Dual cell connection boosting supply current.", symbol: "battery_aa" },
+                    { title: "Li-Ion Battery Module", type: "Power Pack", desc: "Rechargeable 7.4V LiPo pack with balancing protection.", symbol: "battery_lipo" },
+                    { title: "Dual Rail USB & Li-Ion", type: "Hybrid Supply", desc: "Primary high-capacity battery bank with dual power leads.", symbol: "power_usb" }
+                ],
+                prereqs: [],
+                children: ["power_transformer", "protection_block", "switch_module"]
+            },
+            "power_transformer": {
+                id: "power_transformer",
+                x: -420, y: -160,
+                stage: -1,
+                maxStage: 2,
+                stages: [
+                    { title: "Buck Step-Down Converter", type: "Voltage Regulator", desc: "Smooths voltage rails sitting directly in parallel with battery.", symbol: "buck_regulator" },
+                    { title: "Peak Voltage Transformer", type: "Substation Module", desc: "High-capacity voltage transformer & peak spike suppressor.", symbol: "transformer_module" },
+                    { title: "Dual Rail Substation Matrix", type: "Power Distribution", desc: "Multi-tap power substation feeding primary board logic & actuators.", symbol: "substation_array" }
+                ],
+                prereqs: [ { node: "power_source", stage: 1 } ],
+                children: ["heatsink_bus"]
+            },
+            "protection_block": {
+                id: "protection_block",
+                x: -280, y: -160,
+                stage: -1,
+                maxStage: 2,
+                stages: [
+                    { title: "Inline Carbon Resistor", type: "Passive", desc: "Limits current flow to protect fragile filament load.", symbol: "resistor" },
+                    { title: "Fuse & Potentiometer", type: "Protection", desc: "Overcurrent blow-fuse with adjustable manual potentiometer.", symbol: "fuse_pot" },
+                    { title: "Decoupling Filter Array", type: "Filtering", desc: "Bank of ceramic & electrolytic capacitors to suppress ripple.", symbol: "filter_array" }
+                ],
+                prereqs: [ { node: "power_source", stage: 1 } ],
+                children: ["heatsink_bus"]
+            },
+            "heatsink_bus": {
+                id: "heatsink_bus",
+                x: -350, y: -280,
+                stage: -1,
+                maxStage: 1,
+                stages: [
+                    { title: "Passive Aluminum Sink V1", type: "Thermal Dissipator", desc: "Basic extruded fin block dispersing low thermal energy.", symbol: "heatsink_v1" },
+                    { title: "Active Dual-Fan Heatsink V2", type: "Active Thermal Unit", desc: "High-surface copper-core sink with twin cooling micro-fans radiating heat.", symbol: "heatsink_v2" }
+                ],
+                prereqs: [ { node: "power_transformer", stage: 0 }, { node: "protection_block", stage: 1 } ],
+                children: []
+            },
+
+            // 2. SWITCH & OSCILLATOR BRANCH
+            "switch_module": {
+                id: "switch_module",
+                x: -220, y: 160,
+                stage: 0,
+                maxStage: 3,
+                stages: [
+                    { title: "Direct Wire Lead", type: "Conductor", desc: "Simple copper trace completing the primary loop.", symbol: "wire" },
+                    { title: "Knife Switch", type: "Mechanical Switch", desc: "Manual single-pole toggle to interrupt electrical flow.", symbol: "knife_switch" },
+                    { title: "Transistor NPN Switch", type: "Semiconductor", desc: "Low-voltage transistor driver enabling digital switching.", symbol: "transistor" },
+                    { title: "555 Clock Pulse Generator", type: "Timing Engine", desc: "Oscillating circuit generating steady timing pulses.", symbol: "timer_555" }
+                ],
+                prereqs: [],
+                children: ["input_demux"]
+            },
+
+            // 3. LOAD / DISPLAY BRANCH
+            "light_output": {
+                id: "light_output",
+                x: 100, y: -160,
+                stage: 0,
+                maxStage: 3,
+                stages: [
+                    { title: "Filament Lamp Bulb", type: "Load", desc: "Standard incandescent bulb emitting warm glow.", symbol: "bulb" },
+                    { title: "Dual Parallel Lamps", type: "Multi-Load Array", desc: "Two parallel bulbs sharing power load across dual leads.", symbol: "dual_bulb" },
+                    { title: "Opto-Isolated Relay Unit", type: "Actuator Driver", desc: "Solid-state optical relay switching multi-circuit loads.", symbol: "relay" },
+                    { title: "8-Diode RGB Status Array", type: "Visual Diagnostics", desc: "Multi-diode LED status matrix for diagnostic telemetry visual.", symbol: "led_array" }
+                ],
+                prereqs: [],
+                children: ["logic_gates"]
+            },
+
+            // 4. DECOMPOSED PROCESSOR & LOGIC SYSTEM BOARD (EXPANDED SUB-CIRCUIT)
+            "input_demux": {
+                id: "input_demux",
+                x: -80, y: 120,
+                stage: -1,
+                maxStage: 1,
+                stages: [
+                    { title: "Bus Buffer & Switch Filter", type: "Logic Interface", desc: "Cleans input signals and handles line debouncing.", symbol: "demux_buffer" },
+                    { title: "74HC138 4-to-16 Demux", type: "Input Demultiplexer", desc: "High-speed de-multiplexer routing 4 matrix key traces into logic channels.", symbol: "demux_ic" }
+                ],
+                prereqs: [ { node: "switch_module", stage: 2 } ],
+                children: ["logic_gates"]
+            },
+            "logic_gates": {
+                id: "logic_gates",
+                x: 20, y: 0,
+                stage: -1,
+                maxStage: 2,
+                stages: [
+                    { title: "NAND & AND Discrete Gates", type: "Discrete Logic", desc: "Basic transistor logic evaluating primary circuit signals.", symbol: "nand_gates" },
+                    { title: "XOR / NOR Gate Matrix", type: "Gate Array", desc: "Configurable array of logic gates handling multi-way switching.", symbol: "logic_array" },
+                    { title: "ALU Arithmetic Logic Unit", type: "Core Processor", desc: "4-bit hardware ALU performing logical comparisons.", symbol: "alu_core" }
+                ],
+                prereqs: [ { node: "input_demux", stage: 0 }, { node: "light_output", stage: 1 } ],
+                children: ["clock_oscillator", "mcu_core"]
+            },
+            "clock_oscillator": {
+                id: "clock_oscillator",
+                x: 140, y: 120,
+                stage: -1,
+                maxStage: 1,
+                stages: [
+                    { title: "16MHz Quartz Crystal Oscillator", type: "System Clock", desc: "Provides stable high-frequency clock pulses to CPU registers.", symbol: "crystal_osc" }
+                ],
+                prereqs: [ { node: "logic_gates", stage: 1 } ],
+                children: ["mcu_core"]
+            },
+            "mcu_core": {
+                id: "mcu_core",
+                x: 180, y: 0,
+                stage: -1,
+                maxStage: 2,
+                stages: [
+                    { title: "ATmega Microcontroller Core", type: "CPU Unit", desc: "Integrated RISC microcontroller running system firmware.", symbol: "microcontroller" },
+                    { title: "Dual Core 32-bit MCU Module", type: "CPU Unit", desc: "Dual core processor handling real-time wireless & motor logic.", symbol: "dual_mcu" }
+                ],
+                prereqs: [ { node: "logic_gates", stage: 1 }, { node: "clock_oscillator", stage: 0 } ],
+                children: ["pwm_driver", "rf_transmitter"]
+            },
+            "pwm_driver": {
+                id: "pwm_driver",
+                x: 280, y: 120,
+                stage: -1,
+                maxStage: 1,
+                stages: [
+                    { title: "PCA9685 16-Ch PWM Driver", type: "Motor Controller", desc: "Generates precise pulse-width modulation for servo positioning.", symbol: "pwm_ic" }
+                ],
+                prereqs: [ { node: "mcu_core", stage: 0 } ],
+                children: ["rf_transmitter"]
+            },
+            "tactile_keypad": {
+                id: "tactile_keypad",
+                x: -80, y: 260,
+                stage: -1,
+                maxStage: 1,
+                stages: [
+                    { title: "4-Way Arrow Keypad Matrix", type: "Input Interface", desc: "4-button directional switch matrix driving parallel control traces.", symbol: "keypad" }
+                ],
+                prereqs: [ { node: "input_demux", stage: 0 } ],
+                children: ["input_demux"]
+            },
+
+            // 5. RF TELEMETRY TRANSMITTER
+            "rf_transmitter": {
+                id: "rf_transmitter",
+                x: 380, y: 0,
+                stage: -1,
+                maxStage: 1,
+                stages: [
+                    { title: "433MHz RF Transmitter V1", type: "Telemetry", desc: "Simple ASK transmitter broadcasting remote control frames.", symbol: "transmitter_v1" },
+                    { title: "Dual-Band 2.4GHz Transceiver V2", type: "Telemetry", desc: "High-speed encrypted digital transceiver module.", symbol: "transmitter_v2" }
+                ],
+                prereqs: [ { node: "mcu_core", stage: 0 }, { node: "pwm_driver", stage: 0 } ],
+                children: ["rf_receiver"]
+            },
+
+            // 6. DETACHED ROBOT CHASSIS SUB-CIRCUIT
+            "rf_receiver": {
+                id: "rf_receiver",
+                x: 620, y: 0,
+                stage: -1,
+                maxStage: 1,
+                stages: [
+                    { title: "Basic Wire Dipole Receiver V1", type: "Wireless Telemetry", desc: "Receives raw airborne telemetry frames on the robot board.", symbol: "receiver_v1" },
+                    { title: "Low-Noise Antenna Receiver V2", type: "Wireless Telemetry", desc: "Enhanced sensitivity RF receiver with low-noise amplification.", symbol: "receiver_v2" }
+                ],
+                prereqs: [ { node: "rf_transmitter", stage: 0 } ],
+                children: ["decoder_ic", "camera_module"]
+            },
+            "camera_module": {
+                id: "camera_module",
+                x: 620, y: -160,
+                stage: -1,
+                maxStage: 1,
+                stages: [
+                    { title: "Standard Optical Camera V1", type: "Vision Sensor", desc: "Monochrome telemetry camera with fixed optical lens.", symbol: "camera_v1" },
+                    { title: "HD Vision Lens & Flash V2", type: "Vision Sensor", desc: "High-resolution camera array with dual illuminator LEDs and wide FOV.", symbol: "camera_v2" }
+                ],
+                prereqs: [ { node: "rf_receiver", stage: 0 } ],
+                children: []
+            },
+            "decoder_ic": {
+                id: "decoder_ic",
+                x: 780, y: 0,
+                stage: -1,
+                maxStage: 1,
+                stages: [
+                    { title: "Dual H-Bridge Driver V1", type: "Power Actuator", desc: "Standard dual channel motor control IC.", symbol: "h_bridge_v1" },
+                    { title: "Quad MOSFET Driver Board V2", type: "Power Actuator", desc: "High-efficiency MOSFET power driver with thermal heatsinks.", symbol: "h_bridge_v2" }
+                ],
+                prereqs: [ { node: "rf_receiver", stage: 0 } ],
+                children: ["servo_fl", "servo_fr", "servo_rl", "servo_rr"]
+            },
+
+            // 7. 4 INDEPENDENT WHEEL / SERVO ACTUATORS
+            "servo_fl": {
+                id: "servo_fl",
+                x: 940, y: -140,
+                stage: -1,
+                maxStage: 1,
+                stages: [
+                    { title: "Front-Left Servo V1", type: "Actuator", desc: "Micro servo actuator for front-left wheel.", symbol: "servo_v1" },
+                    { title: "Heavy Metal Gear Servo V2", type: "Actuator", desc: "High-torque steel gear steering servo with position feedback.", symbol: "servo_v2" }
+                ],
+                prereqs: [ { node: "decoder_ic", stage: 0 } ],
+                children: []
+            },
+            "servo_fr": {
+                id: "servo_fr",
+                x: 1080, y: -140,
+                stage: -1,
+                maxStage: 1,
+                stages: [
+                    { title: "Front-Right Servo V1", type: "Actuator", desc: "Micro servo actuator for front-right wheel.", symbol: "servo_v1" },
+                    { title: "Heavy Metal Gear Servo V2", type: "Actuator", desc: "High-torque steel gear steering servo with position feedback.", symbol: "servo_v2" }
+                ],
+                prereqs: [ { node: "decoder_ic", stage: 0 } ],
+                children: []
+            },
+            "servo_rl": {
+                id: "servo_rl",
+                x: 940, y: 140,
+                stage: -1,
+                maxStage: 1,
+                stages: [
+                    { title: "Rear-Left DC Motor V1", type: "Traction Motor", desc: "Standard Brushed DC Motor.", symbol: "motor_v1" },
+                    { title: "Brushless Motor & Gearbox V2", type: "Traction Motor", desc: "High-efficiency brushless traction motor with planetary gearbox.", symbol: "motor_v2" }
+                ],
+                prereqs: [ { node: "decoder_ic", stage: 0 } ],
+                children: []
+            },
+            "servo_rr": {
+                id: "servo_rr",
+                x: 1080, y: 140,
+                stage: -1,
+                maxStage: 1,
+                stages: [
+                    { title: "Rear-Right DC Motor V1", type: "Traction Motor", desc: "Standard Brushed DC Motor.", symbol: "motor_v1" },
+                    { title: "Brushless Motor & Gearbox V2", type: "Traction Motor", desc: "High-efficiency brushless traction motor with planetary gearbox.", symbol: "motor_v2" }
+                ],
+                prereqs: [ { node: "decoder_ic", stage: 0 } ],
+                children: []
+            }
+        };
+
+        // SCHEMATIC WIRE CONNECTIONS (INCLUDES EXPANDED PROCESSOR BOARD & KEYPAD BUS)
+        const schematicTraces = [
+            // Base Loop
+            { id: "t1", from: "power_source", to: "switch_module", color: "#f59e0b", type: "power" },
+            { id: "t2", from: "switch_module", to: "light_output", color: "#38bdf8", type: "logic" },
+            { id: "t3", from: "light_output", to: "power_source", color: "#f59e0b", type: "power" },
+
+            // Parallel Power & Transformer Branch
+            { id: "t4", from: "power_source", to: "power_transformer", color: "#f59e0b", type: "power", minStage: { power_source: 1 } },
+            { id: "t5", from: "power_transformer", to: "protection_block", color: "#e879f9", type: "hv", minStage: { power_transformer: 0 } },
+            { id: "t6", from: "power_transformer", to: "heatsink_bus", color: "#e879f9", type: "hv", minStage: { power_transformer: 0 } },
+            { id: "t7", from: "protection_block", to: "heatsink_bus", color: "#e879f9", type: "hv", minStage: { protection_block: 1 } },
+            { id: "t8", from: "power_transformer", to: "light_output", color: "#f59e0b", type: "power", minStage: { power_transformer: 1 } },
+
+            // Decomposed Logic Processor Board Connections
+            { id: "t9", from: "switch_module", to: "input_demux", color: "#38bdf8", type: "logic", minStage: { input_demux: 0 } },
+            { id: "t9_b", from: "input_demux", to: "logic_gates", color: "#38bdf8", type: "logic", minStage: { logic_gates: 0 } },
+            { id: "t10", from: "light_output", to: "logic_gates", color: "#38bdf8", type: "logic", minStage: { logic_gates: 0 } },
+            { id: "t_clk", from: "clock_oscillator", to: "mcu_core", color: "#c084fc", type: "clock", minStage: { clock_oscillator: 0 } },
+            { id: "t_lg_mcu", from: "logic_gates", to: "mcu_core", color: "#38bdf8", type: "logic", minStage: { mcu_core: 0 } },
+            { id: "t_pwm", from: "mcu_core", to: "pwm_driver", color: "#c084fc", type: "clock", minStage: { pwm_driver: 0 } },
+
+            // Multi-Trace Matrix Keypad Lines (4 distinct parallel paths into Demux Buffer)
+            { id: "t11_up", from: "tactile_keypad", to: "input_demux", color: "#38bdf8", type: "logic_bus", offset: -12, minStage: { tactile_keypad: 0 } },
+            { id: "t11_dn", from: "tactile_keypad", to: "input_demux", color: "#38bdf8", type: "logic_bus", offset: -4, minStage: { tactile_keypad: 0 } },
+            { id: "t11_lt", from: "tactile_keypad", to: "input_demux", color: "#38bdf8", type: "logic_bus", offset: 4, minStage: { tactile_keypad: 0 } },
+            { id: "t11_rt", from: "tactile_keypad", to: "input_demux", color: "#38bdf8", type: "logic_bus", offset: 12, minStage: { tactile_keypad: 0 } },
+
+            // Wireless Bridge
+            { id: "t12", from: "mcu_core", to: "rf_transmitter", color: "#38bdf8", type: "logic", minStage: { rf_transmitter: 0 } },
+            { id: "t12_pwm", from: "pwm_driver", to: "rf_transmitter", color: "#c084fc", type: "clock", minStage: { rf_transmitter: 0 } },
+            { id: "t13", from: "rf_transmitter", to: "rf_receiver", color: "#10b981", type: "wireless", minStage: { rf_receiver: 0 } },
+
+            // Robot Chassis Internal Traces
+            { id: "t14", from: "rf_receiver", to: "camera_module", color: "#10b981", type: "logic", minStage: { camera_module: 0 } },
+            { id: "t15", from: "rf_receiver", to: "decoder_ic", color: "#10b981", type: "logic", minStage: { decoder_ic: 0 } },
+            { id: "t16_fl", from: "decoder_ic", to: "servo_fl", color: "#f59e0b", type: "power", minStage: { servo_fl: 0 } },
+            { id: "t16_fr", from: "decoder_ic", to: "servo_fr", color: "#f59e0b", type: "power", minStage: { servo_fr: 0 } },
+            { id: "t16_rl", from: "decoder_ic", to: "servo_rl", color: "#f59e0b", type: "power", minStage: { servo_rl: 0 } },
+            { id: "t16_rr", from: "decoder_ic", to: "servo_rr", color: "#f59e0b", type: "power", minStage: { servo_rr: 0 } }
+        ];
+
+        // --- HELPER & STATE CHECKS ---
+        function checkPrereqs(node) {
+            if (!node || !node.prereqs) return true;
+            for (let req of node.prereqs) {
+                const target = nodesData[req.node];
+                if (!target || target.stage < req.stage) return false;
+            }
+            return true;
+        }
+
+        function isTraceActive(trace) {
+            const fromNode = nodesData[trace.from];
+            const toNode = nodesData[trace.to];
+
+            if (!fromNode || !toNode || fromNode.stage < 0 || toNode.stage < 0) return false;
+            if (trace.minStage) {
+                for (let key in trace.minStage) {
+                    const n = nodesData[key];
+                    if (!n || n.stage < trace.minStage[key]) return false;
+                }
+            }
+            return true;
+        }
+
+        function initParticles() {
+            electronParticles = [];
+            for (let i = 0; i < 65; i++) {
+                electronParticles.push({
+                    traceIdx: Math.floor(Math.random() * schematicTraces.length),
+                    progress: Math.random(),
+                    speed: 0.003 + Math.random() * 0.004
+                });
+            }
+        }
+        initParticles();
+
+        // --- RF & SERVO KINETIC TRIGGER ---
+        function triggerRFWave(dir) {
+            const tx = nodesData["rf_transmitter"];
+            const rx = nodesData["rf_receiver"];
+            if (tx && rx && tx.stage >= 0 && rx.stage >= 0) {
+                rfWaves.push({
+                    x: tx.x, y: tx.y,
+                    targetX: rx.x, targetY: rx.y,
+                    radius: 10,
+                    maxRadius: Math.hypot(rx.x - tx.x, rx.y - tx.y),
+                    alpha: 1.0,
+                    direction: dir
+                });
+
+                const mapDirToServos = {
+                    'up': ['fl', 'fr', 'rl', 'rr'],
+                    'down': ['fl', 'fr', 'rl', 'rr'],
+                    'left': ['fl', 'rl'],
+                    'right': ['fr', 'rr']
+                };
+
+                const targets = mapDirToServos[dir] || [];
+                targets.forEach(sKey => {
+                    servoStates[sKey].tilt = (dir === 'left' ? -0.3 : (dir === 'right' ? 0.3 : (dir === 'up' ? 0.2 : -0.2)));
+                    servoStates[sKey].vibe = 14;
+
+                    const sNode = nodesData[`servo_${sKey}`];
+                    if (sNode && sNode.stage >= 0) {
+                        for (let k = 0; k < 6; k++) {
+                            actuatorSparks.push({
+                                x: sNode.x, y: sNode.y,
+                                vx: (Math.random() - 0.5) * 5,
+                                vy: (Math.random() - 0.5) * 5,
+                                radius: 2 + Math.random() * 4,
+                                life: 1.0
+                            });
+                        }
+                    }
+                });
+            }
+        }
+
+        // --- DISTINCT RENDER COMPONENT SYMBOLS FOR EVERY STAGE ---
+        function drawSymbol(ctx, symbol, x, y, stage) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "#38bdf8";
+            ctx.fillStyle = "#38bdf8";
+
+            switch(symbol) {
+                case "battery_coin":
+                    ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.stroke();
+                    ctx.font = "10px Fira Code"; ctx.fillText("+3V", -10, 4);
+                    break;
+                case "battery_aa":
+                    ctx.strokeRect(-18, -12, 36, 24);
+                    ctx.fillRect(18, -6, 4, 12);
+                    ctx.font = "9px Fira Code"; ctx.fillText("1.5V x 2", -16, 3);
+                    break;
+                case "battery_lipo":
+                    ctx.strokeStyle = "#f59e0b";
+                    ctx.strokeRect(-22, -15, 44, 30);
+                    ctx.strokeRect(-16, -10, 32, 20);
+                    ctx.font = "9px Fira Code"; ctx.fillStyle = "#f59e0b"; ctx.fillText("LiPo 7.4V", -20, 3);
+                    break;
+                case "power_usb":
+                    ctx.strokeStyle = "#f59e0b"; ctx.fillStyle = "#f59e0b";
+                    ctx.strokeRect(-24, -18, 48, 36);
+                    ctx.strokeRect(-18, -12, 12, 24);
+                    ctx.beginPath(); ctx.arc(10, 0, 6, 0, Math.PI * 2); ctx.stroke();
+                    ctx.font = "8px Fira Code"; ctx.fillText("HYBRID", -14, 14);
+                    break;
+
+                case "buck_regulator":
+                    ctx.strokeStyle = "#f59e0b";
+                    ctx.strokeRect(-20, -16, 40, 32);
+                    ctx.beginPath(); ctx.arc(-8, 0, 6, 0, Math.PI*2); ctx.stroke();
+                    ctx.font = "8px Fira Code"; ctx.fillStyle = "#f59e0b"; ctx.fillText("BUCK 5V", -18, 12);
+                    break;
+                case "transformer_module":
+                    ctx.strokeStyle = "#e879f9";
+                    ctx.strokeRect(-22, -18, 44, 36);
+                    ctx.beginPath(); ctx.arc(-8, 0, 8, 0, Math.PI*2); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(8, 0, 8, 0, Math.PI*2); ctx.stroke();
+                    break;
+                case "substation_array":
+                    ctx.strokeStyle = "#e879f9"; ctx.fillStyle = "#e879f9";
+                    ctx.strokeRect(-26, -20, 52, 40);
+                    ctx.strokeRect(-20, -14, 14, 28);
+                    ctx.strokeRect(6, -14, 14, 28);
+                    break;
+
+                case "resistor":
+                    ctx.beginPath();
+                    ctx.moveTo(-20, 0); ctx.lineTo(-12, -8); ctx.lineTo(-4, 8);
+                    ctx.lineTo(4, -8); ctx.lineTo(12, 8); ctx.lineTo(20, 0);
+                    ctx.stroke();
+                    break;
+                case "fuse_pot":
+                    ctx.strokeRect(-16, -8, 32, 16);
+                    ctx.beginPath(); ctx.moveTo(-22, 0); ctx.lineTo(22, 0); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-10, 12); ctx.lineTo(10, -12); ctx.lineTo(6, -12); ctx.stroke();
+                    break;
+                case "filter_array":
+                    for (let dx of [-8, 8]) {
+                        ctx.beginPath(); ctx.moveTo(dx, -12); ctx.lineTo(dx, 12); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(dx-4, -12); ctx.lineTo(dx-4, 12); ctx.stroke();
+                    }
+                    break;
+
+                // Heat Sink V1 vs V2 Distinct Graphics
+                case "heatsink_v1":
+                    ctx.strokeStyle = "#e879f9";
+                    for (let i = -16; i <= 16; i += 8) {
+                        ctx.beginPath(); ctx.moveTo(i, 10); ctx.lineTo(i, -10); ctx.stroke();
+                    }
+                    ctx.strokeRect(-20, -12, 40, 24);
+                    break;
+                case "heatsink_v2":
+                    ctx.strokeStyle = "#f43f5e"; ctx.fillStyle = "#f43f5e";
+                    ctx.strokeRect(-24, -16, 48, 32);
+                    for (let i = -20; i <= 20; i += 5) {
+                        ctx.beginPath(); ctx.moveTo(i, 14); ctx.lineTo(i, -14); ctx.stroke();
+                    }
+                    // Dual Fan Circles
+                    ctx.beginPath(); ctx.arc(-10, 0, 8, 0, Math.PI*2); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(10, 0, 8, 0, Math.PI*2); ctx.stroke();
+                    const fanAngle = Date.now() / 150;
+                    ctx.beginPath(); ctx.arc(-10, 0, 5, fanAngle, fanAngle + 2); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(10, 0, 5, -fanAngle, -fanAngle + 2); ctx.stroke();
+                    break;
+
+                case "wire":
+                    ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(15, 0); ctx.stroke();
+                    break;
+                case "knife_switch":
+                    ctx.beginPath(); ctx.arc(-12, 0, 3, 0, Math.PI*2); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(12, 0, 3, 0, Math.PI*2); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(8, -12); ctx.stroke();
+                    break;
+                case "transistor":
+                    ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI*2); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-6, -8); ctx.lineTo(-6, 8); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-6, -4); ctx.lineTo(8, -10); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-6, 4); ctx.lineTo(8, 10); ctx.stroke();
+                    break;
+                case "timer_555":
+                    ctx.strokeRect(-18, -18, 36, 36);
+                    ctx.font = "9px Fira Code"; ctx.fillText("555", -8, 3);
+                    break;
+                case "bulb":
+                    ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-6, 6); ctx.lineTo(0, -4); ctx.lineTo(6, 6); ctx.stroke();
+                    break;
+                case "dual_bulb":
+                    ctx.beginPath(); ctx.arc(-12, 0, 10, 0, Math.PI * 2); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-16, 5); ctx.lineTo(-12, -3); ctx.lineTo(-8, 5); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(12, 0, 10, 0, Math.PI * 2); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(8, 5); ctx.lineTo(12, -3); ctx.lineTo(16, 5); ctx.stroke();
+                    break;
+                case "relay":
+                    ctx.strokeRect(-16, -14, 32, 28);
+                    ctx.beginPath(); ctx.moveTo(-10, -8); ctx.lineTo(-10, 8); ctx.lineTo(0, -8); ctx.lineTo(0, 8); ctx.stroke();
+                    break;
+                case "led_array":
+                    ctx.strokeStyle = "#38bdf8"; ctx.fillStyle = "#38bdf8";
+                    for (let row = -1; row <= 1; row += 2) {
+                        for (let col = -3; col <= 3; col += 2) {
+                            ctx.beginPath(); ctx.arc(col * 6, row * 6, 2.5, 0, Math.PI*2); ctx.fill();
+                        }
+                    }
+                    ctx.strokeRect(-24, -14, 48, 28);
+                    break;
+
+                // Decomposed Processor Board Symbols
+                case "demux_buffer":
+                    ctx.strokeRect(-16, -16, 32, 32);
+                    ctx.beginPath(); ctx.moveTo(-10, -10); ctx.lineTo(10, 0); ctx.lineTo(-10, 10); ctx.closePath(); ctx.stroke();
+                    break;
+                case "demux_ic":
+                    ctx.strokeStyle = "#38bdf8";
+                    ctx.strokeRect(-20, -16, 40, 32);
+                    ctx.font = "8px Fira Code"; ctx.fillText("74HC138", -18, 3);
+                    break;
+                case "nand_gates":
+                    ctx.strokeRect(-18, -14, 20, 28);
+                    ctx.beginPath(); ctx.arc(2, 0, 14, -Math.PI/2, Math.PI/2); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(18, 0, 3, 0, Math.PI*2); ctx.stroke();
+                    break;
+                case "logic_array":
+                    ctx.strokeRect(-22, -18, 44, 36);
+                    ctx.font = "8px Fira Code"; ctx.fillText("XOR-MATRIX", -22, 3);
+                    break;
+                case "alu_core":
+                    ctx.strokeRect(-22, -18, 44, 36);
+                    ctx.font = "9px Fira Code"; ctx.fillText("4-BIT ALU", -20, 3);
+                    break;
+                case "crystal_osc":
+                    ctx.strokeStyle = "#c084fc";
+                    ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI*2); ctx.stroke();
+                    ctx.strokeRect(-8, -8, 16, 16);
+                    ctx.font = "8px Fira Code"; ctx.fillStyle = "#c084fc"; ctx.fillText("16MHz", -12, 22);
+                    break;
+                case "microcontroller":
+                    ctx.strokeRect(-22, -22, 44, 44);
+                    for (let i = -16; i <= 16; i += 8) {
+                        ctx.strokeRect(i-2, -26, 4, 4);
+                        ctx.strokeRect(i-2, 22, 4, 4);
+                    }
+                    ctx.font = "8px Fira Code"; ctx.fillText("ATmega", -15, 3);
+                    break;
+                case "dual_mcu":
+                    ctx.strokeStyle = "#38bdf8"; ctx.fillStyle = "#38bdf8";
+                    ctx.strokeRect(-24, -24, 48, 48);
+                    ctx.strokeRect(-16, -16, 14, 32); ctx.strokeRect(2, -16, 14, 32);
+                    ctx.font = "7px Fira Code"; ctx.fillText("DUAL CORE", -18, 20);
+                    break;
+                case "pwm_ic":
+                    ctx.strokeStyle = "#c084fc";
+                    ctx.strokeRect(-20, -16, 40, 32);
+                    ctx.font = "8px Fira Code"; ctx.fillStyle = "#c084fc"; ctx.fillText("PCA9685", -18, 3);
+                    break;
+                case "keypad":
+                    ctx.strokeRect(-22, -22, 44, 44);
+                    ctx.font = "10px Fira Code"; ctx.fillText("▲", -3, -8);
+                    ctx.fillText("◄", -15, 4); ctx.fillText("►", 8, 4); ctx.fillText("▼", -3, 16);
+                    break;
+
+                // Distinct RF Tx/Rx V1 vs V2
+                case "transmitter_v1":
+                    ctx.strokeRect(-18, -18, 36, 36);
+                    ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(0, -30); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(0, -30, 4, 0, Math.PI*2); ctx.stroke();
+                    ctx.font = "8px Fira Code"; ctx.fillText("TX 433", -14, 3);
+                    break;
+                case "transmitter_v2":
+                    ctx.strokeStyle = "#10b981"; ctx.fillStyle = "#10b981";
+                    ctx.strokeRect(-22, -20, 44, 40);
+                    ctx.beginPath(); ctx.moveTo(-8, -20); ctx.lineTo(-8, -34); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(8, -20); ctx.lineTo(8, -34); ctx.stroke();
+                    ctx.font = "8px Fira Code"; ctx.fillText("2.4G DUAL", -18, 3);
+                    break;
+                case "receiver_v1":
+                    ctx.strokeStyle = "#10b981"; ctx.fillStyle = "#10b981";
+                    ctx.strokeRect(-18, -18, 36, 36);
+                    ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(0, -30); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(0, -30, 4, 0, Math.PI*2); ctx.fill();
+                    ctx.font = "8px Fira Code"; ctx.fillText("RX 433", -14, 3);
+                    break;
+                case "receiver_v2":
+                    ctx.strokeStyle = "#10b981"; ctx.fillStyle = "#10b981";
+                    ctx.strokeRect(-22, -22, 44, 44);
+                    ctx.beginPath(); ctx.arc(0, -22, 10, -Math.PI, 0); ctx.stroke();
+                    ctx.font = "8px Fira Code"; ctx.fillText("LNA RX-2", -18, 3);
+                    break;
+
+                // Distinct Camera V1 vs V2
+                case "camera_v1":
+                    ctx.strokeStyle = "#10b981"; ctx.fillStyle = "#10b981";
+                    ctx.strokeRect(-20, -14, 40, 28);
+                    ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI*2); ctx.stroke();
+                    break;
+                case "camera_v2":
+                    ctx.strokeStyle = "#10b981"; ctx.fillStyle = "#10b981";
+                    ctx.strokeRect(-24, -16, 48, 32);
+                    ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI*2); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(-14, -8, 3, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(14, -8, 3, 0, Math.PI*2); ctx.fill();
+                    ctx.font = "7px Fira Code"; ctx.fillText("HD FOV", -12, 12);
+                    break;
+
+                // Distinct H-Bridge V1 vs V2
+                case "h_bridge_v1":
+                    ctx.strokeStyle = "#10b981";
+                    ctx.strokeRect(-24, -20, 48, 40);
+                    ctx.font = "9px Fira Code"; ctx.fillStyle = "#10b981"; ctx.fillText("L298N DUAL", -22, 3);
+                    break;
+                case "h_bridge_v2":
+                    ctx.strokeStyle = "#10b981"; ctx.fillStyle = "#10b981";
+                    ctx.strokeRect(-26, -22, 52, 44);
+                    for (let xOff of [-12, 12]) {
+                        ctx.strokeRect(xOff - 6, -14, 12, 28);
+                    }
+                    ctx.font = "7px Fira Code"; ctx.fillText("MOSFET QUAD", -22, 16);
+                    break;
+
+                // Distinct Servo V1 vs V2
+                case "servo_v1":
+                    ctx.strokeStyle = "#f59e0b";
+                    ctx.strokeRect(-14, -14, 28, 28);
+                    ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI*2); ctx.stroke();
+                    break;
+                case "servo_v2":
+                    ctx.strokeStyle = "#f59e0b"; ctx.fillStyle = "#f59e0b";
+                    ctx.strokeRect(-18, -18, 36, 36);
+                    ctx.strokeRect(-14, -14, 28, 28);
+                    ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI*2); ctx.fill();
+                    ctx.font = "7px Fira Code"; ctx.fillText("STEEL", -10, 12);
+                    break;
+
+                // Distinct Motor V1 vs V2
+                case "motor_v1":
+                    ctx.strokeStyle = "#f59e0b";
+                    ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI*2); ctx.stroke();
+                    ctx.font = "9px Fira Code"; ctx.fillText("DC", -6, 3);
+                    break;
+                case "motor_v2":
+                    ctx.strokeStyle = "#f59e0b"; ctx.fillStyle = "#f59e0b";
+                    ctx.strokeRect(-18, -16, 36, 32);
+                    ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.stroke();
+                    ctx.font = "7px Fira Code"; ctx.fillText("BRUSHLESS", -18, 12);
+                    break;
+
+                default:
+                    ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        // --- MAIN CANVAS RENDER ENGINE ---
+        function render() {
+            ctx.save();
+            ctx.clearRect(0, 0, width, height);
+
+            ctx.translate(panX, panY);
+            ctx.scale(scale, scale);
+
+            // 1. PROCESSOR BOARD EXPLICIT SUB-CIRCUIT OUTLINE
+            const demuxNode = nodesData["input_demux"];
+            if (demuxNode && demuxNode.stage >= 0) {
+                ctx.save();
+                ctx.strokeStyle = "rgba(56, 189, 248, 0.25)";
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 4]);
+                ctx.strokeRect(-140, -60, 480, 240);
+                
+                ctx.fillStyle = "rgba(56, 189, 248, 0.4)";
+                ctx.font = "10px Fira Code";
+                ctx.fillText("PROCESSOR & LOGIC SYSTEM BOARD", -125, -45);
+                ctx.restore();
+            }
+
+            // 2. ROBOT CHASSIS BOARD OUTLINE
+            const rxNode = nodesData["rf_receiver"];
+            if (rxNode && rxNode.stage >= 0) {
+                ctx.save();
+                ctx.strokeStyle = "rgba(16, 185, 129, 0.3)";
+                ctx.lineWidth = 2;
+                ctx.setLineDash([8, 6]);
+                ctx.strokeRect(550, -220, 620, 440);
+                
+                ctx.fillStyle = "rgba(16, 185, 129, 0.5)";
+                ctx.font = "10px Fira Code";
+                ctx.fillText("MOBILE ROBOT CHASSIS SUB-BOARD", 565, -200);
+
+                // Optical Camera Scan Wave Visual
+                const camNode = nodesData["camera_module"];
+                if (camNode && camNode.stage >= 0) {
+                    const scanAngle = (Date.now() / 400) % Math.PI - Math.PI/2;
+                    ctx.strokeStyle = "rgba(16, 185, 129, 0.3)";
+                    ctx.fillStyle = "rgba(16, 185, 129, 0.08)";
+                    ctx.beginPath();
+                    ctx.moveTo(camNode.x, camNode.y);
+                    ctx.arc(camNode.x, camNode.y, 80, scanAngle - 0.35, scanAngle + 0.35);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+            }
+
+            // 3. RENDER SCHEMATIC TRACES
+            for (let trace of schematicTraces) {
+                const fromNode = nodesData[trace.from];
+                const toNode = nodesData[trace.to];
+
+                if (!fromNode || !toNode || fromNode.stage < 0 || toNode.stage < 0) continue;
+                if (!isTraceActive(trace)) continue;
+
+                ctx.save();
+                ctx.lineWidth = 2.5;
+
+                if (trace.type === "wireless") {
+                    ctx.strokeStyle = "#10b981";
+                    ctx.setLineDash([4, 8]);
+                } else if (trace.type === "clock") {
+                    ctx.strokeStyle = "#c084fc";
+                } else {
+                    ctx.strokeStyle = trace.color || "#38bdf8";
+                }
+
+                const offset = trace.offset || 0;
+                ctx.beginPath();
+                ctx.moveTo(fromNode.x + offset, fromNode.y + offset);
+
+                const midX = (fromNode.x + toNode.x) / 2 + offset;
+                ctx.lineTo(midX, fromNode.y + offset);
+                ctx.lineTo(midX, toNode.y + offset);
+                ctx.lineTo(toNode.x + offset, toNode.y + offset);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+
+            // 4. THERMAL HEAT DISSIPATION PARTICLES (V1 vs V2 DISPERSION)
+            const hsNode = nodesData["heatsink_bus"];
+            if (hsNode && hsNode.stage >= 0) {
+                const isV2 = hsNode.stage >= 1;
+                const spawnRate = isV2 ? 0.8 : 0.3;
+                
+                if (Math.random() < spawnRate) {
+                    heatParticles.push({
+                        x: hsNode.x + (Math.random() - 0.5) * (isV2 ? 46 : 30),
+                        y: hsNode.y - 10,
+                        vx: (Math.random() - 0.5) * (isV2 ? 1.6 : 0.6),
+                        vy: -1 - Math.random() * (isV2 ? 2.5 : 1.2),
+                        life: 1.0,
+                        size: (isV2 ? 4 : 2.5) + Math.random() * 3,
+                        color: isV2 ? "244, 63, 94" : "245, 158, 11"
+                    });
+                }
+            }
+
+            for (let i = heatParticles.length - 1; i >= 0; i--) {
+                const hp = heatParticles[i];
+                hp.x += hp.vx;
+                hp.y += hp.vy;
+                hp.life -= 0.02;
+
+                if (hp.life <= 0) {
+                    heatParticles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.fillStyle = `rgba(${hp.color}, ${hp.life * 0.7})`;
+                ctx.beginPath();
+                ctx.arc(hp.x, hp.y, hp.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 5. ELECTRON CURRENT FLOW PARTICLES
+            for (let p of electronParticles) {
+                const trace = schematicTraces[p.traceIdx];
+                if (isTraceActive(trace)) {
+                    const fromNode = nodesData[trace.from];
+                    const toNode = nodesData[trace.to];
+
+                    p.progress += p.speed;
+                    if (p.progress > 1) p.progress = 0;
+
+                    const offset = trace.offset || 0;
+                    const midX = (fromNode.x + toNode.x) / 2 + offset;
+                    let px = fromNode.x + offset;
+                    let py = fromNode.y + offset;
+
+                    if (p.progress < 0.333) {
+                        const t = p.progress / 0.333;
+                        px = (fromNode.x + offset) + (midX - (fromNode.x + offset)) * t;
+                        py = fromNode.y + offset;
+                    } else if (p.progress < 0.666) {
+                        const t = (p.progress - 0.333) / 0.333;
+                        px = midX;
+                        py = (fromNode.y + offset) + ((toNode.y + offset) - (fromNode.y + offset)) * t;
+                    } else {
+                        const t = (p.progress - 0.666) / 0.333;
+                        px = midX + ((toNode.x + offset) - midX) * t;
+                        py = toNode.y + offset;
+                    }
+
+                    ctx.save();
+                    ctx.fillStyle = trace.color || "#38bdf8";
+                    ctx.shadowColor = trace.color || "#38bdf8";
+                    ctx.shadowBlur = 6;
+                    ctx.beginPath();
+                    ctx.arc(px, py, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+
+            // 6. WIRELESS RF WAVES
+            for (let i = rfWaves.length - 1; i >= 0; i--) {
+                const wave = rfWaves[i];
+                wave.radius += 4;
+                wave.alpha = 1 - (wave.radius / wave.maxRadius);
+
+                if (wave.radius >= wave.maxRadius) {
+                    rfWaves.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.strokeStyle = `rgba(16, 185, 129, ${wave.alpha})`;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(wave.x, wave.y, wave.radius, -Math.PI / 4, Math.PI / 4);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 7. ACTUATOR MECHANICAL KINETIC SPARKS
+            for (let i = actuatorSparks.length - 1; i >= 0; i--) {
+                const sp = actuatorSparks[i];
+                sp.x += sp.vx;
+                sp.y += sp.vy;
+                sp.life -= 0.04;
+
+                if (sp.life <= 0) {
+                    actuatorSparks.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.strokeStyle = `rgba(245, 158, 11, ${sp.life})`;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(sp.x, sp.y, sp.radius, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 8. SCHEMATIC NODES & SYMBOLS RENDER
+            for (let key in nodesData) {
+                const node = nodesData[key];
+                if (!node) continue;
+
+                if (node.stage < 0 && !checkPrereqs(node)) continue;
+
+                const isUnlocked = node.stage >= 0;
+                const canUnlock = !isUnlocked && checkPrereqs(node);
+                
+                const safeStageIdx = isUnlocked ? Math.min(node.stage, node.stages.length - 1) : 0;
+                const currentStageInfo = node.stages[safeStageIdx];
+
+                ctx.save();
+
+                // Apply Mechanical Tilt / Vibration for Wheel Servos
+                let nodeX = node.x;
+                let nodeY = node.y;
+                let nodeAngle = 0;
+
+                if (key.startsWith("servo_")) {
+                    const sKey = key.replace("servo_", "");
+                    const sState = servoStates[sKey];
+                    if (sState) {
+                        if (sState.vibe > 0) {
+                            nodeX += (Math.random() - 0.5) * sState.vibe;
+                            nodeY += (Math.random() - 0.5) * sState.vibe;
+                            sState.vibe *= 0.85;
+                            if (sState.vibe < 0.5) sState.vibe = 0;
+                        }
+                        nodeAngle = sState.tilt;
+                        sState.tilt *= 0.9;
+                    }
+                }
+
+                ctx.translate(nodeX, nodeY);
+                ctx.rotate(nodeAngle);
+
+                // Dotted Perimeter / Unlockable Glow
+                if (isUnlocked) {
+                    ctx.strokeStyle = "#38bdf8";
+                    ctx.fillStyle = "#0b1329";
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 32, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                } else if (canUnlock) {
+                    const pulse = Math.sin(Date.now() / 200) * 3;
+                    ctx.strokeStyle = "#f59e0b";
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 32 + pulse, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    ctx.fillStyle = "rgba(245, 158, 11, 0.1)";
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 32, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Render Symbol inside Node
+                if (isUnlocked) {
+                    drawSymbol(ctx, currentStageInfo.symbol, 0, 0, node.stage);
+                } else {
+                    ctx.fillStyle = "#f59e0b";
+                    ctx.font = "bold 12px Fira Code";
+                    ctx.textAlign = "center";
+                    ctx.fillText("+ UNLOCK", 0, 4);
+                }
+
+                // Render Label Below Node
+                ctx.font = "10px Fira Code";
+                ctx.textAlign = "center";
+                if (isUnlocked) {
+                    ctx.fillStyle = "#94a3b8";
+                    ctx.fillText(currentStageInfo.title, 0, 48);
+                    ctx.fillStyle = "#38bdf8";
+                    ctx.fillText(`[T${node.stage + 1}/${node.maxStage + 1}]`, 0, 60);
+                } else if (canUnlock) {
+                    ctx.fillStyle = "#f59e0b";
+                    ctx.fillText("DISCOVERY NODE", 0, 48);
+                }
+
+                // Hover Ring
+                if (hoveredNode === node) {
+                    ctx.strokeStyle = "#67e8f9";
+                    ctx.lineWidth = 3;
+                    ctx.shadowColor = "#67e8f9";
+                    ctx.shadowBlur = 12;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 36, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+            }
+
+            ctx.restore();
+            animationFrameId = requestAnimationFrame(render);
+        }
+
+        // --- INTERACTION & HOVER HANDLERS ---
+        function getCanvasCoordinates(e) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const worldX = (mouseX - panX) / scale;
+            const worldY = (mouseY - panY) / scale;
+
+            return { x: worldX, y: worldY, rawX: e.clientX, rawY: e.clientY };
+        }
+
+        function findHoveredNode(worldX, worldY) {
+            for (let key in nodesData) {
+                const node = nodesData[key];
+                if (!node || (node.stage < 0 && !checkPrereqs(node))) continue;
+
+                const dist = Math.hypot(node.x - worldX, node.y - worldY);
+                if (dist <= 35) return node;
+            }
+            return null;
+        }
+
+        // Safe Hover Card Update Logic (Prevents array freeze bug on max upgrade)
+        function updateHoverCard(node) {
+            const card = document.getElementById('hover-card');
+            if (!node) {
+                card.classList.add('opacity-0', 'pointer-events-none', 'translate-y-4');
+                return;
+            }
+
+            const isUnlocked = node.stage >= 0;
+            const canUnlock = !isUnlocked && checkPrereqs(node);
+            const isMax = isUnlocked && node.stage >= node.maxStage;
+
+            // SAFE TIER ACCESS: Lock next index to stages length - 1
+            const currentIdx = Math.max(0, Math.min(node.stage, node.stages.length - 1));
+            const nextIdx = isUnlocked ? Math.min(node.stage + 1, node.stages.length - 1) : 0;
+            const displayStageInfo = isMax ? node.stages[currentIdx] : node.stages[nextIdx];
+
+            document.getElementById('card-type').innerText = displayStageInfo.type || "Component";
+            document.getElementById('card-tier').innerText = `Tier ${node.stage < 0 ? 1 : Math.min(node.stage + (isMax ? 1 : 2), node.maxStage + 1)}`;
+            document.getElementById('card-title').innerText = displayStageInfo.title;
+            document.getElementById('card-desc').innerText = displayStageInfo.desc;
+
+            const prereqContainer = document.getElementById('card-prereq-container');
+            const prereqList = document.getElementById('card-prereq-list');
+            const actionPrompt = document.getElementById('card-action-prompt');
+
+            if (!isUnlocked && !canUnlock) {
+                prereqContainer.classList.remove('hidden');
+                prereqList.innerHTML = (node.prereqs || []).map(r => {
+                    const reqNode = nodesData[r.node];
+                    const reqTitle = reqNode?.stages[r.stage]?.title || "Previous Stage";
+                    return `<li>Requires ${reqNode?.stages[0]?.title || r.node} (${reqTitle})</li>`;
+                }).join('');
+                actionPrompt.innerText = "Locked by Dependencies";
+                actionPrompt.className = "text-xs font-bold text-rose-400 bg-rose-950/50 p-2 rounded border border-rose-800/50 text-center";
+            } else {
+                prereqContainer.classList.add('hidden');
+                if (isMax) {
+                    actionPrompt.innerText = "Fully Evolved Circuit Node";
+                    actionPrompt.className = "text-xs font-bold text-emerald-400 bg-emerald-950/50 p-2 rounded border border-emerald-800/50 text-center";
+                } else {
+                    actionPrompt.innerText = isUnlocked ? "Click Node to Evolve Sub-System" : "Click Node to Unlock Circuit Branch";
+                    actionPrompt.className = "text-xs font-bold text-cyan-400 bg-cyan-950/50 p-2 rounded border border-cyan-800/50 text-center animate-pulse";
+                }
+            }
+
+            card.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-4');
+        }
+
+        // Mouse & Interaction Controls
+        container.addEventListener('mousedown', (e) => {
+            const coords = getCanvasCoordinates(e);
+            const node = findHoveredNode(coords.x, coords.y);
+
+            if (node) {
+                if (node.stage < 0 && checkPrereqs(node)) {
+                    node.stage = 0;
+                    checkGameMilestones();
+                } else if (node.stage >= 0 && node.stage < node.maxStage) {
+                    node.stage++;
+                    checkGameMilestones();
+                }
+                updateHoverCard(node);
+            } else {
+                isDragging = true;
+                startPanX = e.clientX - panX;
+                startPanY = e.clientY - panY;
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                panX = e.clientX - startPanX;
+                panY = e.clientY - startPanY;
+            } else {
+                const coords = getCanvasCoordinates(e);
+                hoveredNode = findHoveredNode(coords.x, coords.y);
+                updateHoverCard(hoveredNode);
+            }
+        });
+
+        window.addEventListener('mouseup', () => { isDragging = false; });
+
+        container.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+            const newScale = scale * zoomFactor;
+            
+            if (newScale >= 0.35 && newScale <= 2.5) {
+                const mouseX = e.clientX;
+                const mouseY = e.clientY;
+
+                panX = mouseX - (mouseX - panX) * zoomFactor;
+                panY = mouseY - (mouseY - panY) * zoomFactor;
+                scale = newScale;
+            }
+        });
+
+        document.getElementById('btn-zoom-in').onclick = () => { scale = Math.min(2.5, scale * 1.2); };
+        document.getElementById('btn-zoom-out').onclick = () => { scale = Math.max(0.35, scale / 1.2); };
+        document.getElementById('btn-reset-view').onclick = () => {
+            scale = 1.0;
+            panX = width / 2 - 100;
+            panY = height / 2;
+        };
+
+        function checkGameMilestones() {
+            const statusText = document.getElementById('status-text');
+            const rfKeypad = nodesData["tactile_keypad"];
+            const rfTx = nodesData["rf_transmitter"];
+            const controllerPad = document.getElementById('remote-controller');
+
+            let totalStages = 0;
+            let unlockedStages = 0;
+            for (let k in nodesData) {
+                totalStages += nodesData[k].maxStage + 1;
+                unlockedStages += (nodesData[k].stage + 1);
+            }
+
+            const percent = Math.floor((unlockedStages / totalStages) * 100);
+            statusText.innerText = `Schematic System Evolution: ${percent}% Complete`;
+
+            if (rfKeypad.stage >= 0 && rfTx.stage >= 0) {
+                controllerPad.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-10');
+            }
+        }
+
+        ['up', 'down', 'left', 'right'].forEach(dir => {
+            const btn = document.getElementById(`btn-${dir}`);
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    triggerRFWave(dir);
+                });
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            width = canvas.width = container.clientWidth;
+            height = canvas.height = container.clientHeight;
+        });
+
+        // Start Loop
+        render();
+    </script>
+</body>
+</html>
